@@ -21,7 +21,7 @@ export default function BusinessDashboard() {
   const [copiedField, setCopiedField] = useState(null); // Tracks which field was copied
 
   useEffect(() => {
-    const savedToken = localStorage.getItem('staffAuthToken');
+    const savedToken = localStorage.getItem('token');
     if (savedToken) {
       setAuthToken(savedToken);
       setIsAuthenticated(true);
@@ -29,7 +29,7 @@ export default function BusinessDashboard() {
   }, []);
 
   const clearStaffSession = () => {
-    localStorage.removeItem('staffAuthToken');
+    localStorage.removeItem('token');
     setAuthToken('');
     setIsAuthenticated(false);
     setAppointments([]);
@@ -39,7 +39,7 @@ export default function BusinessDashboard() {
     e.preventDefault();
     try {
       const res = await axios.post(`${API_URL}/auth/login`, { email, password });
-      localStorage.setItem('staffAuthToken', res.data.token);
+      localStorage.setItem('token', res.data.token);
       setAuthToken(res.data.token);
       setIsAuthenticated(true);
       setAuthError('');
@@ -85,6 +85,58 @@ export default function BusinessDashboard() {
     return () => clearInterval(intervalId);
   }, [fetchAppointments, isAuthenticated]);
 
+  const handleComplete = async (id) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      clearStaffSession();
+      setAuthError('Your staff session has expired. Please sign in again.');
+      return;
+    }
+
+    try {
+      await axios.patch(`${API_URL}/appointments/${id}/complete`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      await fetchAppointments();
+      if (detailsModal.isOpen) {
+        setDetailsModal(prev => ({ ...prev, appointment: { ...prev.appointment, status: 'Completed' } }));
+      }
+    } catch (err) {
+      if (err.response?.status === 401) {
+        clearStaffSession();
+        setAuthError('Your staff session has expired. Please sign in again.');
+        return;
+      }
+      setError(err.response?.data?.message || err.response?.data?.error || 'Failed to update');
+    }
+  };
+
+  const handleCancel = async (id) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      clearStaffSession();
+      setAuthError('Your staff session has expired. Please sign in again.');
+      return;
+    }
+
+    try {
+      await axios.patch(`${API_URL}/appointments/${id}/status`, { status: 'Cancelled' }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      await fetchAppointments();
+      if (detailsModal.isOpen) {
+        setDetailsModal(prev => ({ ...prev, appointment: { ...prev.appointment, status: 'Cancelled' } }));
+      }
+    } catch (err) {
+      if (err.response?.status === 401) {
+        clearStaffSession();
+        setAuthError('Your staff session has expired. Please sign in again.');
+        return;
+      }
+      setError(err.response?.data?.message || err.response?.data?.error || 'Failed to update');
+    }
+  };
+
   const handleStatusChange = (id, currentStatus, newStatus) => {
     if (currentStatus === 'Cancelled' && newStatus === 'Completed') {
       setModal({ isOpen: true, message: "You cannot complete a cancelled appointment.", isAlert: true });
@@ -96,12 +148,15 @@ export default function BusinessDashboard() {
         isOpen: true,
         message: "Are you sure you want to cancel this booking?",
         isAlert: false,
-        action: () => executeStatusChange(id, newStatus)
+        action: () => {
+          setModal({ isOpen: false, message: '', isAlert: false, action: null });
+          handleCancel(id);
+        }
       });
       return;
     }
 
-    executeStatusChange(id, newStatus);
+    handleComplete(id);
   };
 
   const executeStatusChange = async (id, newStatus) => {
