@@ -22,7 +22,6 @@ smart-queue-system/
 │   └── .env                  # Create locally; do not commit
 ├── frontend/
 │   ├── src/
-│   │   ├── assets/
 │   │   ├── pages/
 │   │   ├── App.jsx
 │   │   ├── index.css
