@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { Phone, Mail, Copy, Eye, Check } from 'lucide-react';
 
@@ -21,15 +21,25 @@ export default function BusinessDashboard() {
   const [copiedField, setCopiedField] = useState(null); // Tracks which field was copied
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchAppointments();
+    const savedToken = localStorage.getItem('staffAuthToken');
+    if (savedToken) {
+      setAuthToken(savedToken);
+      setIsAuthenticated(true);
     }
-  }, [dateFilter, statusFilter, isAuthenticated]);
+  }, []);
+
+  const clearStaffSession = () => {
+    localStorage.removeItem('staffAuthToken');
+    setAuthToken('');
+    setIsAuthenticated(false);
+    setAppointments([]);
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
       const res = await axios.post(`${API_URL}/auth/login`, { email, password });
+      localStorage.setItem('staffAuthToken', res.data.token);
       setAuthToken(res.data.token);
       setIsAuthenticated(true);
       setAuthError('');
@@ -39,7 +49,7 @@ export default function BusinessDashboard() {
     }
   };
 
-  const fetchAppointments = async () => {
+  const fetchAppointments = useCallback(async (silent = false) => {
     try {
       let query = '';
       if (dateFilter) query += `date=${dateFilter}&`;
@@ -51,14 +61,29 @@ export default function BusinessDashboard() {
       setAppointments(res.data);
     } catch (err) {
       if (err.response?.status === 401) {
-        setAuthToken('');
-        setIsAuthenticated(false);
+        clearStaffSession();
         setAuthError('Your staff session has expired. Please sign in again.');
         return;
       }
-      setError('Failed to fetch schedule');
+      if (!silent) setError('Failed to fetch schedule');
     }
-  };
+  }, [authToken, dateFilter, statusFilter]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchAppointments();
+    }
+  }, [fetchAppointments, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+
+    const intervalId = setInterval(() => {
+      fetchAppointments(true);
+    }, 15000);
+
+    return () => clearInterval(intervalId);
+  }, [fetchAppointments, isAuthenticated]);
 
   const handleStatusChange = (id, currentStatus, newStatus) => {
     if (currentStatus === 'Cancelled' && newStatus === 'Completed') {
@@ -82,7 +107,11 @@ export default function BusinessDashboard() {
   const executeStatusChange = async (id, newStatus) => {
     setModal({ isOpen: false, message: '', isAlert: false, action: null });
     try {
-      await axios.patch(`${API_URL}/appointments/${id}/status`, { status: newStatus }, {
+      const endpoint = newStatus === 'Completed'
+        ? `${API_URL}/appointments/${id}/complete`
+        : `${API_URL}/appointments/${id}/status`;
+      const payload = newStatus === 'Completed' ? {} : { status: newStatus };
+      await axios.patch(endpoint, payload, {
         headers: { Authorization: `Bearer ${authToken}` }
       });
       await fetchAppointments();
@@ -91,8 +120,7 @@ export default function BusinessDashboard() {
       }
     } catch (err) {
       if (err.response?.status === 401) {
-        setAuthToken('');
-        setIsAuthenticated(false);
+        clearStaffSession();
         setAuthError('Your staff session has expired. Please sign in again.');
         return;
       }
@@ -200,11 +228,9 @@ export default function BusinessDashboard() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Business Schedule</h2>
         <button className="btn btn-outline" onClick={() => {
-          setIsAuthenticated(false);
-          setAuthToken('');
+          clearStaffSession();
           setEmail('');
           setPassword('');
-          setAppointments([]);
         }}>
           Logout
         </button>

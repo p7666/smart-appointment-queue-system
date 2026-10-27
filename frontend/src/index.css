@@ -391,10 +391,10 @@ input:focus, select:focus, textarea:focus {
   gap: 0.15rem;
 }
 
-.slot-btn.unavailable,
-.slot-btn.unavailable:disabled {
+.btn.slot-btn.unavailable:disabled,
+.btn.slot-btn.unavailable:disabled:hover {
   color: #64748b;
-  background: #e2e8f0;
+  background-color: #e2e8f0;
   border-color: #cbd5e1;
   cursor: not-allowed;
 }

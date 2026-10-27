@@ -32,6 +32,7 @@ const isISTSlotInPast = (date, slot, nowIST = getCurrentDateTimeIST()) => {
 
 export default function CustomerBooking() {
   const [services, setServices] = useState([]);
+  const [servicesError, setServicesError] = useState('');
   const [formData, setFormData] = useState({
     serviceId: '', date: '', slot: '', customerName: '', customerEmail: '', customerPhone: '', description: '', durationMinutes: ''
   });
@@ -43,7 +44,16 @@ export default function CustomerBooking() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    axios.get(`${API_URL}/services`).then(res => setServices(res.data));
+    const fetchServices = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/services`);
+        setServices(res.data);
+      } catch {
+        setServicesError('Unable to load services. Please try again later.');
+      }
+    };
+
+    fetchServices();
   }, []);
 
   useEffect(() => {
@@ -186,20 +196,25 @@ export default function CustomerBooking() {
         
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label>Select Service *</label>
-            <select required value={formData.serviceId} onChange={e => setFormData({...formData, serviceId: e.target.value})}>
-              <option value="">Choose a service...</option>
-              {services.map(s => (
-                <option key={s._id} value={s._id}>
-                  {s.name} {s.durationMinutes ? `(${s.durationMinutes} mins)` : ''}
-                </option>
-              ))}
-            </select>
+            <label htmlFor="serviceId">Select Service *</label>
+            {servicesError ? (
+              <p className="alert alert-error" role="alert">{servicesError}</p>
+            ) : (
+              <select id="serviceId" required value={formData.serviceId} onChange={e => setFormData({...formData, serviceId: e.target.value})}>
+                <option value="">Choose a service...</option>
+                {services.map(s => (
+                  <option key={s._id} value={s._id}>
+                    {s.name} {s.durationMinutes ? `(${s.durationMinutes} mins)` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="form-group">
-            <label>Select Date *</label>
+            <label htmlFor="appointmentDate">Select Date *</label>
             <input 
+              id="appointmentDate"
               type="date" 
               required 
               min={getCurrentDateTimeIST().date}
@@ -210,8 +225,8 @@ export default function CustomerBooking() {
 
           {formData.date && (
             <div className="form-group">
-              <label>Time Slots (available and unavailable) *</label>
-              <div className="slots-grid">
+              <div id="slotSelectionLabel">Time Slots (available and unavailable) *</div>
+              <div className="slots-grid" role="group" aria-labelledby="slotSelectionLabel">
                 {slotsLoading ? <p className="slots-empty-text">Loading time slots...</p> : allSlots.map(slot => {
                   const isPast = isISTSlotInPast(formData.date, slot);
                   const isBooked = bookedSlots.includes(slot);
@@ -237,8 +252,9 @@ export default function CustomerBooking() {
           )}
 
           <div className="form-group">
-            <label>Full Name *</label>
+            <label htmlFor="customerName">Full Name *</label>
             <input 
+              id="customerName"
               type="text" 
               required 
               placeholder="e.g. John Doe" 
@@ -249,8 +265,9 @@ export default function CustomerBooking() {
 
           {/* Stacked One Below The Other */}
           <div className="form-group">
-            <label>Email Address (Optional)</label>
+            <label htmlFor="customerEmail">Email Address (Optional)</label>
             <input 
+              id="customerEmail"
               type="email" 
               placeholder="name@example.com" 
               value={formData.customerEmail} 
@@ -259,10 +276,13 @@ export default function CustomerBooking() {
           </div>
 
           <div className="form-group">
-            <label>Phone Number *</label>
+            <label htmlFor="customerPhone">Phone Number *</label>
             <input 
+              id="customerPhone"
               type="tel" 
               required 
+              pattern="[+]?[0-9]+"
+              title="Enter digits only, with an optional leading +."
               placeholder="e.g. 9876543210" 
               value={formData.customerPhone} 
               onChange={e => setFormData({...formData, customerPhone: e.target.value})} 
@@ -270,11 +290,12 @@ export default function CustomerBooking() {
           </div>
 
           <div className="form-group">
-            <label>Custom Duration in Minutes (Optional)</label>
+            <label htmlFor="durationMinutes">Custom Duration in Minutes (Optional)</label>
             <input 
+              id="durationMinutes"
               type="number" 
-              min="15" 
-              step="15"
+              min="1"
+              step="1"
               placeholder="Default service duration applies if left blank"
               value={formData.durationMinutes} 
               onChange={e => setFormData({...formData, durationMinutes: e.target.value})} 
@@ -282,8 +303,9 @@ export default function CustomerBooking() {
           </div>
 
           <div className="form-group" style={{ marginBottom: '1.75rem' }}>
-            <label>Additional Notes / Description (Optional)</label>
+            <label htmlFor="appointmentDescription">Additional Notes / Description (Optional)</label>
             <textarea 
+              id="appointmentDescription"
               placeholder="Share any specific requirements or topics you want to cover..."
               value={formData.description} 
               onChange={e => setFormData({...formData, description: e.target.value})}

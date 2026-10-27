@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const Service = require('./models/Service');
 const Appointment = require('./models/Appointment');
 
@@ -12,6 +13,8 @@ app.use(express.json());
 
 const STAFF_TOKEN_TTL_SECONDS = 8 * 60 * 60;
 const TIME_SLOTS = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'];
+const EMAIL_REGEX = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+const PHONE_REGEX = /^\+?\d+$/;
 
 const getCurrentDateTimeIST = () => {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -49,15 +52,6 @@ const getStaffAuthConfig = () => {
   return { email: STAFF_EMAIL, password: STAFF_PASSWORD, secret: STAFF_TOKEN_SECRET };
 };
 
-const createStaffToken = (secret) => {
-  const payload = Buffer.from(JSON.stringify({
-    sub: 'staff',
-    exp: Math.floor(Date.now() / 1000) + STAFF_TOKEN_TTL_SECONDS
-  })).toString('base64url');
-  const signature = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
-  return `${payload}.${signature}`;
-};
-
 const requireStaffAuth = (req, res, next) => {
   const authConfig = getStaffAuthConfig();
   if (!authConfig) {
@@ -70,19 +64,9 @@ const requireStaffAuth = (req, res, next) => {
     return res.status(401).json({ error: 'Staff authentication required.' });
   }
 
-  const [payload, signature, ...tokenParts] = token.split('.');
-  if (!payload || !signature || tokenParts.length > 0) {
-    return res.status(401).json({ error: 'Invalid or expired staff token.' });
-  }
-
-  const expectedSignature = crypto.createHmac('sha256', authConfig.secret).update(payload).digest('base64url');
-  if (!safeStringEqual(signature, expectedSignature)) {
-    return res.status(401).json({ error: 'Invalid or expired staff token.' });
-  }
-
   try {
-    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    if (claims.sub !== 'staff' || !Number.isFinite(claims.exp) || claims.exp <= Math.floor(Date.now() / 1000)) {
+    const claims = jwt.verify(token, authConfig.secret, { algorithms: ['HS256'] });
+    if (typeof claims !== 'object' || claims.sub !== 'staff') {
       return res.status(401).json({ error: 'Invalid or expired staff token.' });
     }
   } catch (err) {
@@ -126,7 +110,11 @@ app.post('/api/auth/login', (req, res) => {
   }
 
   res.json({
-    token: createStaffToken(authConfig.secret),
+    token: jwt.sign(
+      { sub: 'staff' },
+      authConfig.secret,
+      { algorithm: 'HS256', expiresIn: STAFF_TOKEN_TTL_SECONDS }
+    ),
     expiresIn: STAFF_TOKEN_TTL_SECONDS
   });
 });
@@ -174,6 +162,19 @@ app.post('/api/appointments', async (req, res) => {
     if (!serviceId || !customerName || !customerPhone || !date || !slot) {
       return res.status(400).json({ error: 'All required fields must be provided.' });
     }
+    if (typeof customerPhone !== 'string' || !PHONE_REGEX.test(customerPhone)) {
+      return res.status(400).json({ error: 'Phone number must contain only digits with an optional leading +.' });
+    }
+    if (customerEmail !== undefined && customerEmail !== null && customerEmail !== '' &&
+      (typeof customerEmail !== 'string' || !EMAIL_REGEX.test(customerEmail))) {
+      return res.status(400).json({ error: 'Email address is invalid.' });
+    }
+
+    const hasCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '';
+    const parsedDuration = hasCustomDuration ? Number(durationMinutes) : undefined;
+    if (hasCustomDuration && (!Number.isInteger(parsedDuration) || parsedDuration < 1)) {
+      return res.status(400).json({ error: 'Duration must be a positive whole number of minutes.' });
+    }
 
     const nowIST = getCurrentDateTimeIST();
     if (date < nowIST.date || (date === nowIST.date && slot <= nowIST.time)) {
@@ -181,7 +182,8 @@ app.post('/api/appointments', async (req, res) => {
     }
 
     const appointment = new Appointment({ 
-      serviceId, customerName, customerEmail, customerPhone, date, slot, description, durationMinutes 
+      serviceId, customerName, customerEmail, customerPhone, date, slot, description,
+      durationMinutes: parsedDuration
     });
     
     await appointment.save();
@@ -275,6 +277,23 @@ app.patch('/api/appointments/:id/status', requireStaffAuth, async (req, res) => 
     res.json(appointment);
   } catch (err) {
     res.status(500).json({ error: 'Failed to update status.' });
+  }
+});
+
+app.patch('/api/appointments/:id/complete', requireStaffAuth, async (req, res) => {
+  try {
+    const appointment = await Appointment.findById(req.params.id);
+    if (!appointment) return res.status(404).json({ error: 'Not found.' });
+
+    if (appointment.status !== 'Confirmed') {
+      return res.status(400).json({ error: `Cannot complete an appointment with status ${appointment.status}.` });
+    }
+
+    appointment.status = 'Completed';
+    await appointment.save();
+    res.json(appointment);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to complete appointment.' });
   }
 });
 
