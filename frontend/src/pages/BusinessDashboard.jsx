@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Phone, Mail, Copy, Eye, Check } from 'lucide-react';
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export default function BusinessDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
