@@ -1,0 +1,41 @@
+SMARTQUEUE - DEMO WALKTHROUGH
+
+Before the demo:
+1. Start MongoDB and configure backend/.env with MONGO_URI, PORT=5000,
+   STAFF_EMAIL, STAFF_PASSWORD, and a STAFF_TOKEN_SECRET of at least 32 random
+   characters.
+2. In one terminal, run: cd backend; npm install; node server.js
+3. In another terminal run: cd frontend; npm install; npm run dev
+4. Open the local URL printed by Vite (usually http://localhost:5173).
+
+CUSTOMER BOOKING
+1. Open the Book page.
+2. Choose a service and a date. Available time slots load for that date.
+3. Select a slot, enter a name and phone number, and optionally enter email,
+   duration, or notes.
+4. Select Confirm Booking. The button is disabled while the request is pending.
+5. Point out the confirmation showing the chosen date and time.
+
+SELF-SERVICE LOOKUP AND CANCELLATION
+1. Select Manage in the navigation.
+2. Enter the exact email address or phone number used for the booking and select
+   Search.
+   The server returns only appointments matching that contact.
+3. Review the matching appointment and its status.
+4. For a Confirmed appointment, select Cancel Appointment and confirm the action.
+5. Explain that cancellation releases the slot, so it can appear as available
+   when booking that date again.
+
+STAFF DASHBOARD MANAGEMENT
+1. Select Dashboard.
+2. Sign in with STAFF_EMAIL and STAFF_PASSWORD configured in backend/.env.
+   The backend issues an expiring bearer token for staff-only API access.
+3. Filter the schedule by date and/or status, then inspect an appointment's
+   details.
+4. For a Confirmed appointment, choose Complete or Cancel. Cancellation asks
+   for confirmation; the status is then refreshed in the schedule.
+5. Explain that Confirmed appointments can become Cancelled or Completed,
+   terminal statuses cannot be changed, and simultaneous attempts to book one
+   date/time are protected by MongoDB and produce a conflict response.
+
+END OF WALKTHROUGH
